@@ -9,4 +9,9 @@ keywords = ["mcp", "llm", "alpic", "python"]
 dependencies = [
     "black>=25.1.0",
     "mcp",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "pydantic>=2.10.0",
+    "numpy>=2.1.0",
+    "requests>=2.32.0",
 ]

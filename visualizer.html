@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulateur de Pétanque 3D</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        Simulateur de Pétanque 3D - Contrôle via API
+    </div>
+    
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        
+        const API_URL = 'http://localhost:8001';
+        
+        class PetanqueVisualizer {
+            constructor() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.balls = new Map();
+                this.cochonnet = null;
+                
+                this.init();
+                this.animate();
+                this.startPolling();
+            }
+            
+            init() {
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                document.body.appendChild(this.renderer.domElement);
+                
+                this.scene.background = new THREE.Color(0x87CEEB);
+                
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(5, 10, 5);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.camera.left = -20;
+                directionalLight.shadow.camera.right = 20;
+                directionalLight.shadow.camera.top = 20;
+                directionalLight.shadow.camera.bottom = -20;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                this.scene.add(directionalLight);
+                
+                this.createTerrain();
+                
+                this.camera.position.set(0, 8, 10);
+                this.camera.lookAt(0, 0, 5);
+                
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.05;
+                
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+            
+            createTerrain() {
+                const terrainGeometry = new THREE.BoxGeometry(4, 0.1, 15);
+                const terrainMaterial = new THREE.MeshLambertMaterial({ color: 0xC4A484 });
+                const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
+                terrain.position.y = -0.05;
+                terrain.position.z = 6.5;
+                terrain.receiveShadow = true;
+                this.scene.add(terrain);
+                
+                const borderGeometry = new THREE.BoxGeometry(0.1, 0.2, 15);
+                const borderMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+                
+                const leftBorder = new THREE.Mesh(borderGeometry, borderMaterial);
+                leftBorder.position.set(-2.05, 0.05, 6.5);
+                this.scene.add(leftBorder);
+                
+                const rightBorder = new THREE.Mesh(borderGeometry, borderMaterial);
+                rightBorder.position.set(2.05, 0.05, 6.5);
+                this.scene.add(rightBorder);
+                
+                const endBorderGeometry = new THREE.BoxGeometry(4.2, 0.2, 0.1);
+                const endBorder = new THREE.Mesh(endBorderGeometry, borderMaterial);
+                endBorder.position.set(0, 0.05, 14.05);
+                this.scene.add(endBorder);
+                
+                const startZone = new THREE.Mesh(
+                    new THREE.PlaneGeometry(4, 2),
+                    new THREE.MeshLambertMaterial({ color: 0x90EE90, side: THREE.DoubleSide })
+                );
+                startZone.rotation.x = -Math.PI / 2;
+                startZone.position.set(0, 0.01, -1);
+                this.scene.add(startZone);
+            }
+            
+            updateFromState(state) {
+                const existingIds = new Set();
+                
+                if (state.cochonnet) {
+                    if (!this.cochonnet) {
+                        const geometry = new THREE.SphereGeometry(0.015, 16, 16);
+                        const material = new THREE.MeshPhongMaterial({ 
+                            color: 0xFFFFFF,
+                            emissive: 0xFFFFFF,
+                            emissiveIntensity: 0.2
+                        });
+                        this.cochonnet = new THREE.Mesh(geometry, material);
+                        this.cochonnet.castShadow = true;
+                        this.scene.add(this.cochonnet);
+                    }
+                    this.cochonnet.position.set(...state.cochonnet.position);
+                }
+                
+                state.balls.forEach(ball => {
+                    existingIds.add(ball.id);
+                    
+                    if (!this.balls.has(ball.id)) {
+                        const geometry = new THREE.SphereGeometry(0.04, 32, 32);
+                        const color = ball.color === 'red' ? 0xFF0000 : 0x0000FF;
+                        const material = new THREE.MeshPhongMaterial({ 
+                            color: color,
+                            shininess: 100
+                        });
+                        const mesh = new THREE.Mesh(geometry, material);
+                        mesh.castShadow = true;
+                        mesh.receiveShadow = true;
+                        this.scene.add(mesh);
+                        this.balls.set(ball.id, mesh);
+                    }
+                    
+                    const mesh = this.balls.get(ball.id);
+                    mesh.position.set(...ball.position);
+                });
+                
+                this.balls.forEach((mesh, id) => {
+                    if (!existingIds.has(id)) {
+                        this.scene.remove(mesh);
+                        this.balls.delete(id);
+                    }
+                });
+            }
+            
+            async startPolling() {
+                setInterval(async () => {
+                    try {
+                        const response = await fetch(`${API_URL}/state`);
+                        const state = await response.json();
+                        this.updateFromState(state);
+                    } catch (error) {
+                        console.error('Erreur lors de la récupération de l\'état:', error);
+                    }
+                }, 100);
+            }
+            
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.controls.update();
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+        
+        new PetanqueVisualizer();
+    </script>
+</body>
+</html>
