@@ -61,7 +61,20 @@
                 this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
                 document.body.appendChild(this.renderer.domElement);
                 
-                this.scene.background = new THREE.Color(0x87CEEB);
+                // Ciel avec gradient
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 512;
+                const context = canvas.getContext('2d');
+                const gradient = context.createLinearGradient(0, 0, 0, 512);
+                gradient.addColorStop(0, '#87CEEB');
+                gradient.addColorStop(1, '#E0F6FF');
+                context.fillStyle = gradient;
+                context.fillRect(0, 0, 512, 512);
+                
+                const texture = new THREE.Texture(canvas);
+                texture.needsUpdate = true;
+                this.scene.background = texture;
                 
                 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
                 this.scene.add(ambientLight);
@@ -90,37 +103,76 @@
             }
             
             createTerrain() {
+                // Terrain principal avec texture
                 const terrainGeometry = new THREE.BoxGeometry(4, 0.1, 15);
-                const terrainMaterial = new THREE.MeshLambertMaterial({ color: 0xC4A484 });
+                const terrainTexture = new THREE.TextureLoader().load('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+                terrainTexture.wrapS = terrainTexture.wrapT = THREE.RepeatWrapping;
+                terrainTexture.repeat.set(4, 15);
+                
+                const terrainMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0xD2B48C,
+                    roughness: 0.9
+                });
                 const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
                 terrain.position.y = -0.05;
                 terrain.position.z = 6.5;
                 terrain.receiveShadow = true;
                 this.scene.add(terrain);
                 
-                const borderGeometry = new THREE.BoxGeometry(0.1, 0.2, 15);
-                const borderMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+                // Ajout de graviers décoratifs
+                const gravelCount = 50;
+                for (let i = 0; i < gravelCount; i++) {
+                    const gravelGeometry = new THREE.SphereGeometry(0.02, 8, 8);
+                    const gravelMaterial = new THREE.MeshLambertMaterial({ 
+                        color: new THREE.Color(0.5 + Math.random() * 0.2, 0.4 + Math.random() * 0.2, 0.3)
+                    });
+                    const gravel = new THREE.Mesh(gravelGeometry, gravelMaterial);
+                    gravel.position.set(
+                        (Math.random() - 0.5) * 3.8,
+                        0.01,
+                        Math.random() * 14 - 1
+                    );
+                    gravel.scale.setScalar(0.5 + Math.random() * 0.5);
+                    this.scene.add(gravel);
+                }
+                
+                // Bordures en bois
+                const borderGeometry = new THREE.BoxGeometry(0.15, 0.3, 15);
+                const borderMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0x654321,
+                    emissive: 0x321000,
+                    emissiveIntensity: 0.1
+                });
                 
                 const leftBorder = new THREE.Mesh(borderGeometry, borderMaterial);
-                leftBorder.position.set(-2.05, 0.05, 6.5);
+                leftBorder.position.set(-2.075, 0.1, 6.5);
+                leftBorder.castShadow = true;
                 this.scene.add(leftBorder);
                 
                 const rightBorder = new THREE.Mesh(borderGeometry, borderMaterial);
-                rightBorder.position.set(2.05, 0.05, 6.5);
+                rightBorder.position.set(2.075, 0.1, 6.5);
+                rightBorder.castShadow = true;
                 this.scene.add(rightBorder);
                 
-                const endBorderGeometry = new THREE.BoxGeometry(4.2, 0.2, 0.1);
+                const endBorderGeometry = new THREE.BoxGeometry(4.3, 0.3, 0.15);
                 const endBorder = new THREE.Mesh(endBorderGeometry, borderMaterial);
-                endBorder.position.set(0, 0.05, 14.05);
+                endBorder.position.set(0, 0.1, 14.075);
+                endBorder.castShadow = true;
                 this.scene.add(endBorder);
                 
-                const startZone = new THREE.Mesh(
-                    new THREE.PlaneGeometry(4, 2),
-                    new THREE.MeshLambertMaterial({ color: 0x90EE90, side: THREE.DoubleSide })
-                );
-                startZone.rotation.x = -Math.PI / 2;
-                startZone.position.set(0, 0.01, -1);
-                this.scene.add(startZone);
+                // Bord arrière du terrain (côté lancer)
+                const startBorderGeometry = new THREE.BoxGeometry(4.3, 0.3, 0.15);
+                const startBorder = new THREE.Mesh(startBorderGeometry, borderMaterial);
+                startBorder.position.set(0, 0.1, -1.075);
+                startBorder.castShadow = true;
+                this.scene.add(startBorder);
+                
+                // Ligne de lancer
+                const lineGeometry = new THREE.BoxGeometry(4, 0.02, 0.05);
+                const lineMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+                const launchLine = new THREE.Mesh(lineGeometry, lineMaterial);
+                launchLine.position.set(0, 0.02, 0);
+                this.scene.add(launchLine);
             }
             
             updateFromState(state) {
@@ -128,11 +180,12 @@
                 
                 if (state.cochonnet) {
                     if (!this.cochonnet) {
-                        const geometry = new THREE.SphereGeometry(0.015, 16, 16);
+                        const geometry = new THREE.SphereGeometry(0.03, 32, 32);
                         const material = new THREE.MeshPhongMaterial({ 
-                            color: 0xFFFFFF,
-                            emissive: 0xFFFFFF,
-                            emissiveIntensity: 0.2
+                            color: 0xFFD700,
+                            emissive: 0xFFD700,
+                            emissiveIntensity: 0.3,
+                            shininess: 200
                         });
                         this.cochonnet = new THREE.Mesh(geometry, material);
                         this.cochonnet.castShadow = true;
@@ -145,15 +198,27 @@
                     existingIds.add(ball.id);
                     
                     if (!this.balls.has(ball.id)) {
-                        const geometry = new THREE.SphereGeometry(0.04, 32, 32);
-                        const color = ball.color === 'red' ? 0xFF0000 : 0x0000FF;
+                        const geometry = new THREE.SphereGeometry(0.08, 64, 64);
+                        const color = ball.color === 'red' ? 0xCC0000 : 0x0066CC;
                         const material = new THREE.MeshPhongMaterial({ 
                             color: color,
-                            shininess: 100
+                            shininess: 150,
+                            specular: 0x222222
                         });
                         const mesh = new THREE.Mesh(geometry, material);
                         mesh.castShadow = true;
                         mesh.receiveShadow = true;
+                        
+                        // Ajouter une bande sur la boule
+                        const stripeGeometry = new THREE.RingGeometry(0.079, 0.081, 64);
+                        const stripeMaterial = new THREE.MeshBasicMaterial({ 
+                            color: 0xFFFFFF, 
+                            side: THREE.DoubleSide 
+                        });
+                        const stripe = new THREE.Mesh(stripeGeometry, stripeMaterial);
+                        stripe.rotation.x = Math.PI / 2;
+                        mesh.add(stripe);
+                        
                         this.scene.add(mesh);
                         this.balls.set(ball.id, mesh);
                     }

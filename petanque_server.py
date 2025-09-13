@@ -70,7 +70,7 @@ class GameSimulator:
         self.cochonnet = Ball(
             id="cochonnet",
             type=BallType.COCHONNET,
-            position=(x, 0.015, z),
+            position=(x, 0.03, z),
             color="white"
         )
         self.game_phase = "playing"
@@ -123,8 +123,8 @@ class GameSimulator:
             pos[1] += vel[1] * dt
             pos[2] += vel[2] * dt
             
-            if pos[1] <= 0.04:
-                pos[1] = 0.04
+            if pos[1] <= 0.08:
+                pos[1] = 0.08
                 vel[1] = -vel[1] * restitution
                 
                 vel[0] *= (1 - friction * dt)
@@ -188,7 +188,7 @@ async def reset_game():
 async def place_cochonnet(x: float, z: float):
     try:
         simulator.place_cochonnet(x, z)
-        return {"message": "Cochonnet placé", "position": [x, 0.015, z]}
+        return {"message": "Cochonnet placé", "position": [x, 0.03, z]}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
