@@ -12,7 +12,8 @@ import time
 
 mcp = FastMCP("Pétanque Simulator MCP", port=3000, stateless_http=True, debug=True)
 
-API_URL = "http://localhost:8001"
+import os
+API_URL = os.environ.get("PETANQUE_API_URL", "https://lesphynx.onrender.com")
 
 @mcp.tool(
     title="Réinitialiser la partie",
